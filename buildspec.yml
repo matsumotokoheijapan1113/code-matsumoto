@@ -22,7 +22,7 @@ phases:
     commands:
       - docker tag ${ECR_REPO_NAME}:latest ${ECR_IMAGE_URI}
       - docker push ${ECR_IMAGE_URI}
-      - printf '[{"name":"test/ecs-sqs-producer","imageUri":"%s"}]' ${ECR_IMAGE_URI} > imagedefinitions.json
+      - printf '[{"name":"app","imageUri":"%s"}]' ${ECR_IMAGE_URI} > imagedefinitions.json
 
 artifacts:
   files:
