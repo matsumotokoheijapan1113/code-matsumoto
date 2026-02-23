@@ -1,0 +1,9 @@
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": [
+      "*.yaml",
+      "*.yml"
+    ],
+    "https://www.schemastore.org/yamllint.json": "file:///c%3A/Users/AWS%20%E8%A8%AD%E8%A8%88%E3%83%BB%E6%A7%8B%E7%AF%89/SQS%20-%20python/buildspec.yml"
+  }
+}
