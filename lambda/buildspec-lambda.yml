@@ -2,70 +2,48 @@ version: 0.2
 
 env:
   variables:
-    # Lambdaが存在するリージョン（東京）
     AWS_REGION: ap-northeast-1
-
-    # デプロイ対象のLambda関数名（例：test）
     LAMBDA_FUNCTION_NAME: test
-
-    # CodeDeployで切り替えるエイリアス名（例：prod）
     LAMBDA_ALIAS_NAME: prod
 
 phases:
   build:
     commands:
-      # 以降の処理が分かりやすいようにログ出力
       - echo "== build zip =="
-
-      # CodeBuildがチェックアウトしたリポジトリのルート（絶対パス）から、
-      # 必ず lambda ディレクトリへ移動（cd迷子防止）
       - cd "$CODEBUILD_SRC_DIR/lambda"
-
-      # Lambdaのソースが置いてあるディレクトリへ移動
       - cd src
-
-      # src配下の中身（matsumoto.pyなど）をZIP化して、1つ上（lambda/）にlambda.zipを作る
-      # ※この作り方だとZIPのルート直下に matsumoto.py が入る
       - zip -r ../lambda.zip .
-
-      # lambda/ に戻る
       - cd ..
-
-      # ZIPができたか確認（サイズ・存在確認）
       - echo "ZIP created:"
       - ls -lh lambda.zip
 
   post_build:
     commands:
-      # 以降は「Lambda更新 → Version発行 → appspec.yml生成」
       - echo "== update lambda code + publish version =="
-
-      # 念のため毎回ルートからlambdaに移動（どこにいるか分からなくなる事故防止）
       - cd "$CODEBUILD_SRC_DIR/lambda"
-
-      # 現在、Alias（prod）が指しているVersionを取得（＝CurrentVersion）
-      # CodeDeployが「どのVersionからどのVersionへ切り替えるか」を知るために必要
       - CURRENT_VERSION=$(aws lambda get-alias --function-name "${LAMBDA_FUNCTION_NAME}" --name "${LAMBDA_ALIAS_NAME}" --region "${AWS_REGION}" --query 'FunctionVersion' --output text)
       - echo "CURRENT_VERSION=${CURRENT_VERSION}"
-
-      # ZIPをLambdaへ反映（$LATESTにコードを上書き）
       - aws lambda update-function-code --function-name "${LAMBDA_FUNCTION_NAME}" --zip-file "fileb://lambda.zip" --region "${AWS_REGION}"
-
-      # $LATESTを固定Versionとして発行（＝TargetVersion）
-      # ここで得たVersion番号を CodeDeploy の TargetVersion に使う
       - TARGET_VERSION=$(aws lambda publish-version --function-name "${LAMBDA_FUNCTION_NAME}" --region "${AWS_REGION}" --query 'Version' --output text)
       - echo "TARGET_VERSION=${TARGET_VERSION}"
 
-      # CodeDeployが読む appspec.yml を、その場で生成する（GitHubには置かない運用）
-      # CurrentVersion → TargetVersion へ、Alias（prod）を切り替える指示書
-      - printf "version: 0.0\nResources:\n  - MyLambdaFunction:\n      Type: AWS::Lambda::Function\n      Properties:\n        Name: %s\n        Alias: %s\n        CurrentVersion: \"%s\"\n        TargetVersion: \"%s\"\n" "${LAMBDA_FUNCTION_NAME}" "${LAMBDA_ALIAS_NAME}" "${CURRENT_VERSION}" "${TARGET_VERSION}" > appspec.yml
+      # appspec.yml を YAML を壊さず生成する（printfの長文は避ける）
+      - |
+        cat > appspec.yml <<EOF
+        version: 0.0
+        Resources:
+          - MyLambdaFunction:
+              Type: AWS::Lambda::Function
+              Properties:
+                Name: ${LAMBDA_FUNCTION_NAME}
+                Alias: ${LAMBDA_ALIAS_NAME}
+                CurrentVersion: "${CURRENT_VERSION}"
+                TargetVersion: "${TARGET_VERSION}"
+        EOF
 
-      # 生成されたappspec.ymlの中身をログに出して確認（デバッグ用）
       - echo "== generated appspec.yml =="
       - cat appspec.yml
 
 artifacts:
   files:
-    # CodePipelineの次ステージ（Deploy: CodeDeploy）へ渡す成果物
-    # CodeDeployはこの appspec.yml を見て、Aliasの切替＋ロールバックを実行する
     - lambda/appspec.yml
