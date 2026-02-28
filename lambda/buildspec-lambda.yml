@@ -21,9 +21,24 @@ phases:
     commands:
       - echo "== update lambda code + publish version =="
       - cd "$CODEBUILD_SRC_DIR/lambda"
+
       - CURRENT_VERSION=$(aws lambda get-alias --function-name "${LAMBDA_FUNCTION_NAME}" --name "${LAMBDA_ALIAS_NAME}" --region "${AWS_REGION}" --query 'FunctionVersion' --output text)
       - echo "CURRENT_VERSION=${CURRENT_VERSION}"
+
       - aws lambda update-function-code --function-name "${LAMBDA_FUNCTION_NAME}" --zip-file "fileb://lambda.zip" --region "${AWS_REGION}"
+
+      - echo "== wait for update completed =="
+      - |
+        for i in $(seq 1 60); do
+          STATUS=$(aws lambda get-function-configuration \
+            --function-name "${LAMBDA_FUNCTION_NAME}" \
+            --region "${AWS_REGION}" \
+            --query 'LastUpdateStatus' \
+            --output text)
+          [ "${STATUS}" = "Successful" ] && break
+          sleep 2
+        done
+
       - TARGET_VERSION=$(aws lambda publish-version --function-name "${LAMBDA_FUNCTION_NAME}" --region "${AWS_REGION}" --query 'Version' --output text)
       - echo "TARGET_VERSION=${TARGET_VERSION}"
 
