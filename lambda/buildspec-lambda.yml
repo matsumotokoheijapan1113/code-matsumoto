@@ -27,7 +27,6 @@ phases:
       - TARGET_VERSION=$(aws lambda publish-version --function-name "${LAMBDA_FUNCTION_NAME}" --region "${AWS_REGION}" --query 'Version' --output text)
       - echo "TARGET_VERSION=${TARGET_VERSION}"
 
-      # appspec.yml を YAML を壊さず生成する（printfの長文は避ける）
       - |
         cat > appspec.yml <<EOF
         version: 0.0
