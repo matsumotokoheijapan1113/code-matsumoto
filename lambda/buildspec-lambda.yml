@@ -3,8 +3,6 @@ version: 0.2
 env:
   variables:
     AWS_REGION: ap-northeast-1
-
-    # ★必ずあなたの環境に合わせて変更
     LAMBDA_FUNCTION_NAME: test
     LAMBDA_ALIAS_NAME: prod
 
@@ -12,10 +10,9 @@ phases:
   build:
     commands:
       - echo "== build zip =="
-      - cd lambda
+      - cd "$CODEBUILD_SRC_DIR/lambda"
 
       # src配下の中身（matsumoto.py）をZIPのルートに入れる
-      # → Lambda Handler は matsumoto.lambda_handler
       - cd src
       - zip -r ../lambda.zip .
       - cd ..
@@ -26,10 +23,8 @@ phases:
   post_build:
     commands:
       - echo "== update lambda code + publish version =="
-      - cd lambda
+      - cd "$CODEBUILD_SRC_DIR/lambda"
 
-      # 現在prod aliasが指しているVersion（Current）
-      # ※prod aliasは事前に作成しておくこと
       - CURRENT_VERSION=$(aws lambda get-alias \
         --function-name "${LAMBDA_FUNCTION_NAME}" \
         --name "${LAMBDA_ALIAS_NAME}" \
@@ -38,13 +33,11 @@ phases:
         --output text)
       - echo "CURRENT_VERSION=${CURRENT_VERSION}"
 
-      # コードを $LATEST に反映
       - aws lambda update-function-code \
         --function-name "${LAMBDA_FUNCTION_NAME}" \
         --zip-file "fileb://lambda.zip" \
         --region "${AWS_REGION}"
 
-      # 新しいVersionを発行（Target）
       - TARGET_VERSION=$(aws lambda publish-version \
         --function-name "${LAMBDA_FUNCTION_NAME}" \
         --region "${AWS_REGION}" \
@@ -52,7 +45,6 @@ phases:
         --output text)
       - echo "TARGET_VERSION=${TARGET_VERSION}"
 
-      # CodeDeployに渡す appspec.yml をここで生成（GitHubには置かない）
       - |
         cat > appspec.yml <<EOF
         version: 0.0
