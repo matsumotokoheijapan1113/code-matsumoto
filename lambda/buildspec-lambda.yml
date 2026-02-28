@@ -14,20 +14,15 @@ phases:
       - cd src
       - zip -r ../lambda.zip .
       - cd ..
-      - echo "ZIP created:"
       - ls -lh lambda.zip
 
   post_build:
     commands:
       - echo "== update lambda code + publish version =="
       - cd "$CODEBUILD_SRC_DIR/lambda"
-
       - CURRENT_VERSION=$(aws lambda get-alias --function-name "${LAMBDA_FUNCTION_NAME}" --name "${LAMBDA_ALIAS_NAME}" --region "${AWS_REGION}" --query 'FunctionVersion' --output text)
-      - echo "CURRENT_VERSION=${CURRENT_VERSION}"
-
       - aws lambda update-function-code --function-name "${LAMBDA_FUNCTION_NAME}" --zip-file "fileb://lambda.zip" --region "${AWS_REGION}"
 
-      - echo "== wait for update completed =="
       - |
         for i in $(seq 1 60); do
           STATUS=$(aws lambda get-function-configuration \
@@ -40,10 +35,10 @@ phases:
         done
 
       - TARGET_VERSION=$(aws lambda publish-version --function-name "${LAMBDA_FUNCTION_NAME}" --region "${AWS_REGION}" --query 'Version' --output text)
-      - echo "TARGET_VERSION=${TARGET_VERSION}"
 
+      # ★ appsepc.yml を「リポジトリのルート」に生成する
       - |
-        cat > appspec.yml <<EOF
+        cat > "$CODEBUILD_SRC_DIR/appspec.yml" <<EOF
         version: 0.0
         Resources:
           - MyLambdaFunction:
@@ -56,8 +51,9 @@ phases:
         EOF
 
       - echo "== generated appspec.yml =="
-      - cat appspec.yml
+      - cat "$CODEBUILD_SRC_DIR/appspec.yml"
 
 artifacts:
   files:
-    - lambda/appspec.yml
+    - appspec.yml
+    - lambda/lambda.zip
