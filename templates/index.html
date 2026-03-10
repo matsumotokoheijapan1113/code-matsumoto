@@ -5,22 +5,28 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{{ title }}</title>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
-      .card { max-width: 520px; padding: 20px; border: 1px solid #ddd; border-radius: 12px; }
-      button { padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer; }
+      body { font-family: system-ui, sans-serif; padding: 24px; }
+      .card { max-width: 560px; padding: 20px; border: 1px solid #ddd; border-radius: 12px; }
+      input, button { padding: 10px; border-radius: 8px; }
+      input { width: 100%; box-sizing: border-box; margin-bottom: 12px; border: 1px solid #ccc; }
+      button { border: 0; cursor: pointer; }
       .ok { margin-top: 16px; padding: 12px; border-radius: 10px; background: #eefbf0; }
       .ng { margin-top: 16px; padding: 12px; border-radius: 10px; background: #fdeeee; }
       .muted { color: #666; font-size: 12px; margin-top: 8px; }
-      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      code { font-family: ui-monospace, monospace; }
     </style>
   </head>
   <body>
     <div class="card">
       <h2>{{ title }}</h2>
-      <p>ボタンを押すと SQS にメッセージを 1 件送信します。これは2つめのECSです。山口百恵！</p>
+      <p>
+        ボタンを押すと、SQS経由でLambdaがKMS親キーを確認または作成し、
+        AES-256データキーを生成して、暗号化済みデータキーだけDBへ保存します。
+      </p>
 
       <form action="/send" method="post">
-        <button type="submit">メッセージ送信</button>
+        <input type="text" name="note" placeholder="メモ（任意）" value="simple test" />
+        <button type="submit">KMSデータキー作成を依頼</button>
       </form>
 
       {% if result %}
@@ -33,7 +39,8 @@
       {% endif %}
 
       <div class="muted">
-        ※ 環境変数: <code>SQS_QUEUE_URL</code>（必須） / <code>AWS_REGION</code> / <code>SQS_MESSAGE_GROUP_ID</code>（FIFO用）
+        必須環境変数: <code>SQS_QUEUE_URL</code><br>
+        任意: <code>AWS_REGION</code> / <code>SQS_MESSAGE_GROUP_ID</code> / <code>APP_TITLE</code>
       </div>
     </div>
   </body>

@@ -1,14 +1,17 @@
 import os
 import uuid
-from fastapi import FastAPI, Request
+import json
+from datetime import datetime
+
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import boto3
 
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-1")
-QUEUE_URL = os.getenv("SQS_QUEUE_URL")  # 必須
-GROUP_ID = os.getenv("SQS_MESSAGE_GROUP_ID", "default")  # FIFO用（Standardでも害なし）
-APP_TITLE = os.getenv("APP_TITLE", "SQS Admin")
+QUEUE_URL = os.getenv("SQS_QUEUE_URL")
+GROUP_ID = os.getenv("SQS_MESSAGE_GROUP_ID", "default")
+APP_TITLE = os.getenv("APP_TITLE", "KMS Simple Admin")
 
 if not QUEUE_URL:
     raise RuntimeError("Missing env: SQS_QUEUE_URL")
@@ -21,33 +24,33 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    # 初期表示（メッセージなし）
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "title": APP_TITLE, "result": None, "detail": None},
+        {
+            "request": request,
+            "title": APP_TITLE,
+            "result": None,
+            "detail": None,
+        },
     )
 
 
 @app.post("/send", response_class=HTMLResponse)
-async def send_message(request: Request):
-    """
-    ボタン押下で1件送信 → 成功/失敗を画面に表示
-    FIFOなら MessageGroupId / MessageDeduplicationId を付ける
-    Standardなら余計なパラメータがあってもエラーになるので分岐する
-    """
+async def send_message(request: Request, note: str = Form(default="simple test")):
     is_fifo = QUEUE_URL.endswith(".fifo")
 
     body = {
-        "ts": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-        "source": "ecs-admin",
-        "action": "button_click",
+        "action": "create_kms_data_key",
+        "note": note,
         "request_id": str(uuid.uuid4()),
+        "ts": datetime.utcnow().isoformat() + "Z",
+        "source": "ecs-admin"
     }
 
     try:
         params = {
             "QueueUrl": QUEUE_URL,
-            "MessageBody": __import__("json").dumps(body),
+            "MessageBody": json.dumps(body, ensure_ascii=False),
         }
 
         if is_fifo:
@@ -62,8 +65,8 @@ async def send_message(request: Request):
             {
                 "request": request,
                 "title": APP_TITLE,
-                "result": "成功しました！",
-                "detail": f"MessageId: {msg_id}",
+                "result": "送信成功",
+                "detail": f"SQS MessageId: {msg_id}",
             },
         )
 
@@ -73,7 +76,7 @@ async def send_message(request: Request):
             {
                 "request": request,
                 "title": APP_TITLE,
-                "result": "失敗しました…",
+                "result": "送信失敗",
                 "detail": str(e),
             },
         )
