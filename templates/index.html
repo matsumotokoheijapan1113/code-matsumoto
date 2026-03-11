@@ -17,10 +17,7 @@
   <body>
     <div class="card">
       <h2>{{ title }}</h2>
-      <p>
-        ボタンを押すと、SQS経由でLambdaがKMS親キーを確認または作成し、
-        AES-256データキーを生成し、暗号化済みデータキーだけDBへ保存します。
-      </p>
+      <p>ボタンを押すと、固定メッセージを SQS に送信します。</p>
 
       <form action="/send" method="post">
         <button type="submit">KMSデータキー作成を依頼</button>
@@ -36,8 +33,7 @@
       {% endif %}
 
       <div class="muted">
-        必須環境変数: <code>SQS_QUEUE_URL</code><br>
-        任意: <code>AWS_REGION</code> / <code>SQS_MESSAGE_GROUP_ID</code> / <code>APP_TITLE</code>
+        必須環境変数: <code>SQS_QUEUE_URL</code>
       </div>
     </div>
   </body>
