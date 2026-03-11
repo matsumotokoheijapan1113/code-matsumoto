@@ -12,20 +12,11 @@ kms_client = boto3.client("kms", region_name=REGION)
 
 
 def get_secret(secret_name: str) -> dict:
-    """Secrets ManagerからDB認証情報を取得"""
     response = secrets_client.get_secret_value(SecretId=secret_name)
     return json.loads(response["SecretString"])
 
 
 def get_db_connection():
-    """
-    PostgreSQL接続を作成
-    Secrets Manager の SecretString 例:
-    {
-      "username": "postgres",
-      "password": "xxxxx"
-    }
-    """
     secret_name = os.environ["DB_SECRET_NAME"]
     host = os.environ["DB_HOST"]
     dbname = os.environ["DB_NAME"]
@@ -35,25 +26,19 @@ def get_db_connection():
     user = secret["username"]
     password = secret["password"]
 
-    conn = psycopg2.connect(
+    return psycopg2.connect(
         host=host,
         dbname=dbname,
         user=user,
         password=password,
         port=port,
     )
-    return conn
 
 
 def ensure_kms_key_exists(alias_name: str) -> str:
-    """
-    エイリアスでKMSキーを探し、なければ新規作成する
-    戻り値: KeyId
-    """
     try:
         response = kms_client.describe_key(KeyId=alias_name)
         return response["KeyMetadata"]["KeyId"]
-
     except kms_client.exceptions.NotFoundException:
         create_res = kms_client.create_key(
             Description="Simple symmetric KMS key created by Lambda",
@@ -67,15 +52,10 @@ def ensure_kms_key_exists(alias_name: str) -> str:
             AliasName=alias_name,
             TargetKeyId=key_id,
         )
-
         return key_id
 
 
 def generate_data_key(alias_name: str) -> dict:
-    """
-    AES-256のデータキーを生成
-    平文は保存しない
-    """
     response = kms_client.generate_data_key(
         KeyId=alias_name,
         KeySpec="AES_256",
@@ -97,10 +77,6 @@ def save_encrypted_data_key(
     note: str,
     source: str,
 ) -> int:
-    """
-    暗号化済みデータキーをDBへ保存する
-    戻り値: INSERTされたid
-    """
     sql = """
         INSERT INTO kms_data_keys (
             request_id,
@@ -130,19 +106,14 @@ def save_encrypted_data_key(
                 ),
             )
             inserted_id = cur.fetchone()[0]
-
         conn.commit()
         return inserted_id
-
     finally:
         if conn:
             conn.close()
 
 
 def process_one_message(record: dict):
-    """
-    SQSメッセージ1件を処理
-    """
     body = json.loads(record["body"])
 
     action = body.get("action")
@@ -154,7 +125,6 @@ def process_one_message(record: dict):
     source = body.get("source", "unknown")
 
     parent_key_id = ensure_kms_key_exists(KMS_ALIAS)
-
     data_key = generate_data_key(KMS_ALIAS)
 
     row_id = save_encrypted_data_key(
@@ -182,28 +152,16 @@ def process_one_message(record: dict):
 
 
 def lambda_handler(event, context):
-    """
-    SQSトリガー用Lambda
-    partial batch response対応
-    """
     batch_item_failures = []
-    results = []
 
     for record in event.get("Records", []):
         try:
-            result = process_one_message(record)
-            results.append(result)
-
+            process_one_message(record)
         except Exception as e:
             print(f"ERROR messageId={record.get('messageId')} error={str(e)}")
             batch_item_failures.append({
                 "itemIdentifier": record["messageId"]
             })
-
-    print(json.dumps({
-        "processed_count": len(results),
-        "failed_count": len(batch_item_failures)
-    }, ensure_ascii=False))
 
     return {
         "batchItemFailures": batch_item_failures
