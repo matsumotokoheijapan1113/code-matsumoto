@@ -20,7 +20,7 @@ def get_secret(secret_name: str) -> dict:
 def get_db_connection():
     """
     PostgreSQL接続を作成
-    Secrets Managerの例:
+    Secrets Manager の SecretString 例:
     {
       "username": "postgres",
       "password": "xxxxx"
@@ -40,7 +40,7 @@ def get_db_connection():
         dbname=dbname,
         user=user,
         password=password,
-        port=port
+        port=port,
     )
     return conn
 
@@ -59,13 +59,13 @@ def ensure_kms_key_exists(alias_name: str) -> str:
             Description="Simple symmetric KMS key created by Lambda",
             KeyUsage="ENCRYPT_DECRYPT",
             KeySpec="SYMMETRIC_DEFAULT",
-            Origin="AWS_KMS"
+            Origin="AWS_KMS",
         )
         key_id = create_res["KeyMetadata"]["KeyId"]
 
         kms_client.create_alias(
             AliasName=alias_name,
-            TargetKeyId=key_id
+            TargetKeyId=key_id,
         )
 
         return key_id
@@ -74,18 +74,18 @@ def ensure_kms_key_exists(alias_name: str) -> str:
 def generate_data_key(alias_name: str) -> dict:
     """
     AES-256のデータキーを生成
-    平文は返るが、保存しない
+    平文は保存しない
     """
     response = kms_client.generate_data_key(
         KeyId=alias_name,
-        KeySpec="AES_256"
+        KeySpec="AES_256",
     )
 
     encrypted_key_b64 = base64.b64encode(response["CiphertextBlob"]).decode("utf-8")
 
     return {
         "kms_key_id": response["KeyId"],
-        "encrypted_key_b64": encrypted_key_b64
+        "encrypted_key_b64": encrypted_key_b64,
     }
 
 
@@ -95,7 +95,7 @@ def save_encrypted_data_key(
     kms_alias: str,
     encrypted_data_key_b64: str,
     note: str,
-    source: str
+    source: str,
 ) -> int:
     """
     暗号化済みデータキーをDBへ保存する
@@ -126,8 +126,8 @@ def save_encrypted_data_key(
                     kms_alias,
                     encrypted_data_key_b64,
                     note,
-                    source
-                )
+                    source,
+                ),
             )
             inserted_id = cur.fetchone()[0]
 
@@ -153,23 +153,19 @@ def process_one_message(record: dict):
     note = body.get("note", "")
     source = body.get("source", "unknown")
 
-    # 1. KMS親キーを確保
     parent_key_id = ensure_kms_key_exists(KMS_ALIAS)
 
-    # 2. AES-256データキー生成
     data_key = generate_data_key(KMS_ALIAS)
 
-    # 3. 暗号化済みデータキーだけDB保存
     row_id = save_encrypted_data_key(
         request_id=request_id,
         kms_key_id=data_key["kms_key_id"],
         kms_alias=KMS_ALIAS,
         encrypted_data_key_b64=data_key["encrypted_key_b64"],
         note=note,
-        source=source
+        source=source,
     )
 
-    # 4. ログ出力（平文は出さない）
     result = {
         "request_id": request_id,
         "db_saved": True,
@@ -178,7 +174,7 @@ def process_one_message(record: dict):
         "source": source,
         "kms_alias": KMS_ALIAS,
         "parent_kms_key_id": parent_key_id,
-        "generated_kms_key_id": data_key["kms_key_id"]
+        "generated_kms_key_id": data_key["kms_key_id"],
     }
 
     print(json.dumps(result, ensure_ascii=False))

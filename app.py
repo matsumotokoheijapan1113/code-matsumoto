@@ -3,7 +3,7 @@ import uuid
 import json
 from datetime import datetime
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import boto3
@@ -36,15 +36,15 @@ async def index(request: Request):
 
 
 @app.post("/send", response_class=HTMLResponse)
-async def send_message(request: Request, note: str = Form(default="simple test")):
+async def send_message(request: Request):
     is_fifo = QUEUE_URL.endswith(".fifo")
 
     body = {
         "action": "create_kms_data_key",
-        "note": note,
+        "note": "simple test",
         "request_id": str(uuid.uuid4()),
         "ts": datetime.utcnow().isoformat() + "Z",
-        "source": "ecs-admin"
+        "source": "ecs-admin",
     }
 
     try:
