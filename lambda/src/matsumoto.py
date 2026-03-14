@@ -35,27 +35,20 @@ def get_db_connection():
     )
 
 
-def ensure_kms_key_exists(alias_name: str) -> str:
-    try:
-        response = kms_client.describe_key(KeyId=alias_name)
-        return response["KeyMetadata"]["KeyId"]
-    except kms_client.exceptions.NotFoundException:
-        create_res = kms_client.create_key(
-            Description="Simple symmetric KMS key created by Lambda",
-            KeyUsage="ENCRYPT_DECRYPT",
-            KeySpec="SYMMETRIC_DEFAULT",
-            Origin="AWS_KMS",
-        )
-        key_id = create_res["KeyMetadata"]["KeyId"]
-
-        kms_client.create_alias(
-            AliasName=alias_name,
-            TargetKeyId=key_id,
-        )
-        return key_id
+def get_existing_kms_key(alias_name: str) -> str:
+    """
+    既存のKMSキーを確認するだけ。
+    存在しない場合は例外にして終了する。
+    """
+    response = kms_client.describe_key(KeyId=alias_name)
+    return response["KeyMetadata"]["KeyId"]
 
 
 def generate_data_key(alias_name: str) -> dict:
+    """
+    既存のCMKを使ってデータキーを生成する。
+    返すのはDB保存用に暗号化済みデータキーのみ。
+    """
     response = kms_client.generate_data_key(
         KeyId=alias_name,
         KeySpec="AES_256",
@@ -124,8 +117,13 @@ def process_one_message(record: dict):
     note = body.get("note", "")
     source = body.get("source", "unknown")
 
-    parent_key_id = ensure_kms_key_exists(KMS_ALIAS)
+    print(f"START request_id={request_id} kms_alias={KMS_ALIAS}")
+
+    parent_key_id = get_existing_kms_key(KMS_ALIAS)
+    print(f"KMS key confirmed. key_id={parent_key_id}")
+
     data_key = generate_data_key(KMS_ALIAS)
+    print("Data key generated successfully.")
 
     row_id = save_encrypted_data_key(
         request_id=request_id,
@@ -135,6 +133,7 @@ def process_one_message(record: dict):
         note=note,
         source=source,
     )
+    print(f"DB insert completed. inserted_id={row_id}")
 
     result = {
         "request_id": request_id,
