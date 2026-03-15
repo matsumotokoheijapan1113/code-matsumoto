@@ -1,0 +1,30 @@
+version: 0.2
+
+env:
+  variables:
+    ECR_REPO_NAME: test/ecs-sqs-producer
+
+phases:
+  pre_build:
+    commands:
+      - echo "test start"
+      - echo "checking build artifact..."
+      - EXPECTED_IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest"
+
+  build:
+    commands:
+      - test -f imagedefinitions.json
+      - echo "imagedefinitions.json exists"
+      - cat imagedefinitions.json
+      - grep '"name":"app"' imagedefinitions.json
+      - echo "container name is app"
+      - grep "\"imageUri\":\"${EXPECTED_IMAGE_URI}\"" imagedefinitions.json
+      - echo "imageUri is correct"
+
+  post_build:
+    commands:
+      - echo "test passed"
+
+artifacts:
+  files:
+    - imagedefinitions.json
