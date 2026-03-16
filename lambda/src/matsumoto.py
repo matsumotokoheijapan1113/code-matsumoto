@@ -36,19 +36,11 @@ def get_db_connection():
 
 
 def get_existing_kms_key(alias_name: str) -> str:
-    """
-    既存のKMSキーを確認するだけ。
-    存在しない場合は例外にして終了する。
-    """
     response = kms_client.describe_key(KeyId=alias_name)
     return response["KeyMetadata"]["KeyId"]
 
 
 def generate_data_key(alias_name: str) -> dict:
-    """
-    既存のCMKを使ってデータキーを生成する。
-    返すのはDB保存用に暗号化済みデータキーのみ。
-    """
     response = kms_client.generate_data_key(
         KeyId=alias_name,
         KeySpec="AES_256",
@@ -107,13 +99,15 @@ def save_encrypted_data_key(
 
 
 def process_one_message(record: dict):
-    body = json.loads(record["body"])
+    # record は SQS 1件相当
+    body_raw = record.get("body", "{}")
+    body = json.loads(body_raw)
 
     action = body.get("action")
     if action != "create_kms_data_key":
         raise ValueError(f"Unsupported action: {action}")
 
-    request_id = body.get("request_id", record["messageId"])
+    request_id = body.get("request_id", record.get("messageId", "unknown"))
     note = body.get("note", "")
     source = body.get("source", "unknown")
 
@@ -151,17 +145,32 @@ def process_one_message(record: dict):
 
 
 def lambda_handler(event, context):
-    batch_item_failures = []
+    # まず受信形をログに出す
+    print("RAW EVENT:")
+    print(json.dumps(event, ensure_ascii=False))
 
-    for record in event.get("Records", []):
-        try:
-            process_one_message(record)
-        except Exception as e:
-            print(f"ERROR messageId={record.get('messageId')} error={str(e)}")
-            batch_item_failures.append({
-                "itemIdentifier": record["messageId"]
-            })
+    # EventBridge Pipes -> Lambda の場合、バッチは JSON 配列で来る
+    if isinstance(event, list):
+        records = event
+
+    # 念のため、SQS 直接トリガー形式にも対応
+    elif isinstance(event, dict) and "Records" in event:
+        records = event["Records"]
+
+    # 1件だけ dict で来た場合の保険
+    elif isinstance(event, dict) and "body" in event:
+        records = [event]
+
+    else:
+        raise ValueError(f"Unsupported event format: {type(event)}")
+
+    processed = 0
+
+    for record in records:
+        process_one_message(record)
+        processed += 1
 
     return {
-        "batchItemFailures": batch_item_failures
+        "status": "ok",
+        "processed": processed
     }
