@@ -3,9 +3,11 @@ import json
 import base64
 import boto3
 import psycopg2
+import urllib.request
 
 REGION = os.getenv("AWS_REGION", "ap-northeast-1")
 KMS_ALIAS = os.getenv("KMS_ALIAS", "alias/simple-test-kms-key")
+CALLBACK_URL = os.getenv("CALLBACK_URL")
 
 secrets_client = boto3.client("secretsmanager", region_name=REGION)
 kms_client = boto3.client("kms", region_name=REGION)
@@ -46,10 +48,12 @@ def generate_data_key(alias_name: str) -> dict:
         KeySpec="AES_256",
     )
 
+    plaintext_key_b64 = base64.b64encode(response["Plaintext"]).decode("utf-8")
     encrypted_key_b64 = base64.b64encode(response["CiphertextBlob"]).decode("utf-8")
 
     return {
         "kms_key_id": response["KeyId"],
+        "plaintext_key_b64": plaintext_key_b64,
         "encrypted_key_b64": encrypted_key_b64,
     }
 
@@ -98,8 +102,24 @@ def save_encrypted_data_key(
             conn.close()
 
 
+def send_callback(callback_url: str, payload: dict) -> dict:
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    req = urllib.request.Request(
+        callback_url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=10) as res:
+        return {
+            "status_code": res.status,
+            "body": res.read().decode("utf-8"),
+        }
+
+
 def process_one_message(record: dict):
-    # SQS 1件相当
     body_raw = record.get("body", "{}")
     body = json.loads(body_raw)
 
@@ -112,6 +132,9 @@ def process_one_message(record: dict):
     source = body.get("source", "unknown")
 
     print(f"START request_id={request_id} kms_alias={KMS_ALIAS}")
+
+    if not CALLBACK_URL:
+        raise RuntimeError("Missing env: CALLBACK_URL")
 
     parent_key_id = get_existing_kms_key(KMS_ALIAS)
     print(f"KMS key confirmed. key_id={parent_key_id}")
@@ -129,6 +152,15 @@ def process_one_message(record: dict):
     )
     print(f"DB insert completed. inserted_id={row_id}")
 
+    callback_payload = {
+        "request_id": request_id,
+        "status": "ok",
+        "plaintext_data_key_b64": data_key["plaintext_key_b64"],
+    }
+
+    callback_result = send_callback(CALLBACK_URL, callback_payload)
+    print(f"Callback completed. status_code={callback_result['status_code']}")
+
     result = {
         "request_id": request_id,
         "db_saved": True,
@@ -138,6 +170,8 @@ def process_one_message(record: dict):
         "kms_alias": KMS_ALIAS,
         "parent_kms_key_id": parent_key_id,
         "generated_kms_key_id": data_key["kms_key_id"],
+        "callback_sent": True,
+        "callback_status_code": callback_result["status_code"],
     }
 
     print(json.dumps(result, ensure_ascii=False))
@@ -148,14 +182,10 @@ def lambda_handler(event, context):
     print("RAW EVENT:")
     print(json.dumps(event, ensure_ascii=False))
 
-    # SQS トリガー前提
     if isinstance(event, dict) and "Records" in event:
         records = event["Records"]
-
-    # ローカルテスト用の保険
     elif isinstance(event, dict) and "body" in event:
         records = [event]
-
     else:
         raise ValueError("Unsupported event format. Expected SQS event with Records.")
 
