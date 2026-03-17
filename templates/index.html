@@ -5,39 +5,246 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{{ title }}</title>
     <style>
-      body { font-family: system-ui, sans-serif; padding: 24px; }
-      .card { max-width: 560px; padding: 20px; border: 1px solid #ddd; border-radius: 12px; }
-      button { padding: 10px 16px; border-radius: 8px; border: 0; cursor: pointer; }
-      .ok { margin-top: 16px; padding: 12px; border-radius: 10px; background: #eefbf0; }
-      .ng { margin-top: 16px; padding: 12px; border-radius: 10px; background: #fdeeee; }
-      .muted { color: #666; font-size: 12px; margin-top: 8px; }
-      code { font-family: ui-monospace, monospace; }
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f4f7fb;
+        color: #1f2937;
+      }
+
+      .wrap {
+        max-width: 980px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+
+      .page-title {
+        margin: 0 0 10px;
+        font-size: 30px;
+      }
+
+      .page-desc {
+        margin: 0 0 24px;
+        color: #4b5563;
+        line-height: 1.7;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+
+      .card {
+        background: #fff;
+        border: 1px solid #dbe3ee;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      }
+
+      .card h2 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 22px;
+      }
+
+      .card p {
+        margin-top: 0;
+        margin-bottom: 14px;
+        line-height: 1.7;
+        color: #374151;
+      }
+
+      .tag {
+        display: inline-block;
+        margin-bottom: 14px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .tag-lambda {
+        background: #eef4ff;
+        color: #1d4ed8;
+      }
+
+      .tag-ecs {
+        background: #ecfdf5;
+        color: #047857;
+      }
+
+      .btn {
+        display: inline-block;
+        width: 100%;
+        padding: 14px 18px;
+        border: 0;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: 0.2s ease;
+      }
+
+      .btn:hover {
+        opacity: 0.92;
+      }
+
+      .btn-lambda {
+        background: #2563eb;
+        color: #fff;
+      }
+
+      .btn-ecs {
+        background: #059669;
+        color: #fff;
+      }
+
+      .result {
+        margin-top: 24px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+      }
+
+      .result.ok {
+        background: #effaf3;
+        border-color: #b7e4c7;
+      }
+
+      .result.ng {
+        background: #fff1f2;
+        border-color: #fecdd3;
+      }
+
+      .result h3 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+
+      .result p {
+        margin: 6px 0;
+        color: #374151;
+      }
+
+      .info-box {
+        margin-top: 24px;
+        background: #ffffff;
+        border: 1px solid #dbe3ee;
+        border-radius: 16px;
+        padding: 20px 24px;
+      }
+
+      .info-box h3 {
+        margin-top: 0;
+        margin-bottom: 12px;
+      }
+
+      .info-box ul {
+        margin: 0;
+        padding-left: 18px;
+        color: #374151;
+        line-height: 1.8;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+        word-break: break-all;
+      }
+
+      .muted {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #6b7280;
+      }
+
+      @media (max-width: 800px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h2>{{ title }}</h2>
-      <p>
-        ボタンを押すと、SQS経由でLambdaがKMS親キーを確認または作成し、
-        AES-256データキーを生成し、暗号化済みデータキーだけDBへ保存します。
+    <div class="wrap">
+      <h1 class="page-title">{{ title }}</h1>
+      <p class="page-desc">
+        前段ECSから、リクエスト内容に応じて送信先SQSを分ける確認画面です。<br />
+        Lambda向けは <code>SQS_QUEUE_URL</code>、ECS向けは <code>SQS_QUEUE_URL_ECS</code> に送信します。
       </p>
 
-      <form action="/send" method="post">
-        <button type="submit">KMSデータキー作成を依頼</button>
-      </form>
+      <div class="grid">
+        <div class="card">
+          <div class="tag tag-lambda">Lambdaルート</div>
+          <h2>KMSデータキー作成を依頼</h2>
+          <p>
+            Lambda用SQSへメッセージを送信します。<br />
+            後続では Lambda が KMS でデータキーを生成し、DB登録まで実行する想定です。
+          </p>
+          <p class="muted">
+            送信先: <code>{{ lambda_queue_url }}</code>
+          </p>
+
+          <form action="/send/lambda" method="post">
+            <button class="btn btn-lambda" type="submit">
+              Lambda用SQSへ送信
+            </button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="tag tag-ecs">ECSルート</div>
+          <h2>SQS→ECS 通信確認</h2>
+          <p>
+            ECS用SQSへメッセージを送信します。<br />
+            後段ECSがSQSをポーリングし、受信確認ログを出せれば成功です。
+          </p>
+          <p class="muted">
+            送信先: <code>{{ ecs_queue_url }}</code>
+          </p>
+
+          <form action="/send/ecs" method="post">
+            <button class="btn btn-ecs" type="submit">
+              ECS用SQSへ送信
+            </button>
+          </form>
+        </div>
+      </div>
 
       {% if result %}
-        <div class="{% if '成功' in result %}ok{% else %}ng{% endif %}">
-          <strong>{{ result }}</strong>
+        <div class="result {% if '成功' in result %}ok{% else %}ng{% endif %}">
+          <h3>{{ result }}</h3>
+          {% if route_type == 'lambda' %}
+            <p>ルート: Lambda向け</p>
+          {% elif route_type == 'ecs' %}
+            <p>ルート: ECS向け</p>
+          {% endif %}
+          {% if queue_name %}
+            <p>使用環境変数: <code>{{ queue_name }}</code></p>
+          {% endif %}
           {% if detail %}
-            <div class="muted"><code>{{ detail }}</code></div>
+            <p>詳細: <code>{{ detail }}</code></p>
           {% endif %}
         </div>
       {% endif %}
 
-      <div class="muted">
-        必須環境変数: <code>SQS_QUEUE_URL</code><br>
-        任意: <code>AWS_REGION</code> / <code>SQS_MESSAGE_GROUP_ID</code> / <code>APP_TITLE</code>
+      <div class="info-box">
+        <h3>環境変数</h3>
+        <ul>
+          <li><code>AWS_REGION</code> : AWSリージョン</li>
+          <li><code>SQS_QUEUE_URL</code> : Lambda用SQS URL</li>
+          <li><code>SQS_QUEUE_URL_ECS</code> : ECS用SQS URL</li>
+          <li><code>SQS_MESSAGE_GROUP_ID</code> : FIFOキューの場合のみ使用</li>
+          <li><code>APP_TITLE</code> : 画面タイトル</li>
+        </ul>
       </div>
     </div>
   </body>
