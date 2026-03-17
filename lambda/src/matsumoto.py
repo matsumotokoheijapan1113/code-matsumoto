@@ -99,7 +99,7 @@ def save_encrypted_data_key(
 
 
 def process_one_message(record: dict):
-    # record は SQS 1件相当
+    # SQS 1件相当
     body_raw = record.get("body", "{}")
     body = json.loads(body_raw)
 
@@ -145,24 +145,19 @@ def process_one_message(record: dict):
 
 
 def lambda_handler(event, context):
-    # まず受信形をログに出す
     print("RAW EVENT:")
     print(json.dumps(event, ensure_ascii=False))
 
-    # EventBridge Pipes -> Lambda の場合、バッチは JSON 配列で来る
-    if isinstance(event, list):
-        records = event
-
-    # 念のため、SQS 直接トリガー形式にも対応
-    elif isinstance(event, dict) and "Records" in event:
+    # SQS トリガー前提
+    if isinstance(event, dict) and "Records" in event:
         records = event["Records"]
 
-    # 1件だけ dict で来た場合の保険
+    # ローカルテスト用の保険
     elif isinstance(event, dict) and "body" in event:
         records = [event]
 
     else:
-        raise ValueError(f"Unsupported event format: {type(event)}")
+        raise ValueError("Unsupported event format. Expected SQS event with Records.")
 
     processed = 0
 
